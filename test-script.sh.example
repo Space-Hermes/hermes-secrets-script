@@ -1,0 +1,11 @@
+#!/bin/bash
+# Example fetch script for secrets.script provider.
+# Replace with your actual credential retrieval (bw, pass, op, etc.)
+set -e
+
+cat << 'EOF'
+{
+  "OPENAI_API_KEY": "sk-your-key-here",
+  "ANTHROPIC_API_KEY": "sk-ant-your-key-here"
+}
+EOF

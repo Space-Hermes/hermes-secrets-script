@@ -1,0 +1,10 @@
+# ~/.hermes/config.yaml (or profile config)
+secrets:
+  script:
+    enabled: true
+    command: "/usr/local/bin/my-fetch-script.sh"
+    parse: json
+    timeout: 30
+    retry_delays: [5, 10, 20]
+    cache_ttl: 300
+    override_existing: false

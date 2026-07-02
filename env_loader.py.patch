@@ -1,0 +1,17 @@
+# Patch for hermes_cli/env_loader.py
+#
+# Apply with:
+#   cd ~/.hermes/hermes-agent
+#   patch -p0 < path/to/env_loader.py.patch
+#
+# Or manually:
+#   1. In _apply_external_secret_sources(), after the bitwarden dispatch block,
+#      add a script dispatch block:
+#
+#      sc_cfg = (cfg or {}).get("script") or {}
+#      if sc_cfg.get("enabled"):
+#          from agent.secret_sources.script import apply_script_secrets
+#          _try_script_source(sc_cfg, home_path)
+#
+#   2. Add the _try_script_source() function (see script.py docstring for the
+#      full reference). The pattern mirrors _try_bitwarden_source().
