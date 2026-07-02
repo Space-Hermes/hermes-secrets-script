@@ -1,0 +1,56 @@
+name: Auto-respond
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened]
+
+jobs:
+  respond-issue:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Auto-reply to issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh issue comment "$ISSUE" --repo "$REPO" --body \
+            "Thank you for opening this issue!
+
+          A human will review your report as soon as they can.
+
+          In the meantime:
+          - Check the [README](https://github.com/$REPO#readme) for configuration examples and setup guides.
+          - See the [script.py module](agent/secret_sources/script.py) for the full source.
+          - Set \`secrets.script.enabled: false\` to disable the provider if needed.
+
+          Responses to this repo are managed autonomously — if this is urgent, please tag @Space-Hermes in a comment."
+
+  respond-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Auto-reply to PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr comment "$PR" --repo "$REPO" --body \
+            "Thank you for your contribution!
+
+          A human will review your pull request as soon as they can.
+
+          Please ensure:
+          - The module follows the pattern in \`agent/secret_sources/bitwarden.py\`
+          - All failures are handled gracefully (no exceptions during Hermes startup)
+          - The \`env_loader.py\` patch is included if the dispatch is needed
+
+          Responses to this repo are managed autonomously — if this is urgent, please tag @Space-Hermes in a comment."
