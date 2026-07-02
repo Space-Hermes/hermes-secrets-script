@@ -4,6 +4,8 @@ A pluggable secret source for [Hermes Agent](https://github.com/NousResearch/her
 
 Use it to wire in **Vaultwarden** (via `bw`), **pass**, **1Password CLI**, **Bitwarden CLI**, AWS Secrets Manager, or a custom fetch script — without modifying Hermes core.
 
+> **Upstream proposal:** [NousResearch/hermes-agent#57062](https://github.com/NousResearch/hermes-agent/issues/57062)
+
 ## How it Works
 
 When Hermes starts, it loads `.env`, then calls every enabled secret source. The script provider:
