@@ -1,17 +1,61 @@
-# Patch for hermes_cli/env_loader.py
-#
-# Apply with:
-#   cd ~/.hermes/hermes-agent
-#   patch -p0 < path/to/env_loader.py.patch
-#
-# Or manually:
-#   1. In _apply_external_secret_sources(), after the bitwarden dispatch block,
-#      add a script dispatch block:
-#
-#      sc_cfg = (cfg or {}).get("script") or {}
-#      if sc_cfg.get("enabled"):
-#          from agent.secret_sources.script import apply_script_secrets
-#          _try_script_source(sc_cfg, home_path)
-#
-#   2. Add the _try_script_source() function (see script.py docstring for the
-#      full reference). The pattern mirrors _try_bitwarden_source().
+The integration requires two changes to your Hermes install:
+
+1. **Copy `agent/secret_sources/script.py`** into your Hermes agent directory:
+   ```bash
+   cp -r agent/ ~/.hermes/hermes-agent/
+   ```
+
+2. **Add the dispatch block** in `hermes_cli/env_loader.py` inside the
+   `_apply_external_secret_sources()` function, after the existing bitwarden block:
+
+   ```python
+   # ------------------------------------------------------------------
+   # Source: Script / exec-based
+   # ------------------------------------------------------------------
+   sc_cfg = (cfg or {}).get("script") or {}
+   if sc_cfg.get("enabled"):
+       try:
+           from agent.secret_sources.script import apply_script_secrets
+       except ImportError:
+           pass
+       else:
+           _try_script_source(sc_cfg, home_path)
+   ```
+
+3. **Add the `_try_script_source()` helper function** anywhere in the same file:
+
+   ```python
+   def _try_script_source(sc_cfg: dict, home_path: Path) -> None:
+       from agent.secret_sources.script import apply_script_secrets
+   
+       result = apply_script_secrets(
+           enabled=True,
+           command=str(sc_cfg.get("command", "") or "").strip(),
+           parse=str(sc_cfg.get("parse", "json") or "json").strip(),
+           timeout=float(sc_cfg.get("timeout", 30)),
+           retry_delays=sc_cfg.get("retry_delays"),
+           override_existing=bool(sc_cfg.get("override_existing", False)),
+           cache_ttl_seconds=float(sc_cfg.get("cache_ttl", 300)),
+           home_path=home_path,
+       )
+   
+       if result.applied:
+           from hermes_cli.env_loader import _sanitize_loaded_credentials, _SECRET_SOURCES
+           _sanitize_loaded_credentials()
+           for name in result.applied:
+               _SECRET_SOURCES[name] = "script"
+           print(
+               f"  Script secrets: applied {len(result.applied)} "
+               f"secret{'s' if len(result.applied) != 1 else ''} "
+               f"({', '.join(sorted(result.applied))})",
+               file=__import__("sys").stderr,
+           )
+       if result.error:
+           print(f"  Script secrets: {result.error}", file=__import__("sys").stderr)
+       for warn in result.warnings:
+           print(f"  Script secrets: {warn}", file=__import__("sys").stderr)
+   ```
+
+The function mirrors the existing `_try_bitwarden_source()` pattern already present in
+`hermes_cli/env_loader.py`. The dispatch block runs as a second source alongside
+bitwarden — both can be enabled simultaneously.

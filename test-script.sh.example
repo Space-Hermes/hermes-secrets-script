@@ -5,7 +5,7 @@ set -e
 
 cat << 'EOF'
 {
-  "OPENAI_API_KEY": "sk-your-key-here",
-  "ANTHROPIC_API_KEY": "sk-ant-your-key-here"
+  "OPENAI_API_KEY": "sk-placeholder",
+  "ANTHROPIC_API_KEY": "sk-ant-placeholder"
 }
 EOF

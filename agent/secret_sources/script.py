@@ -59,7 +59,7 @@ logger = logging.getLogger(__name__)
 # In-process cache so back-to-back load_hermes_dotenv() calls don't
 # re-execute the script on every call.
 # ---------------------------------------------------------------------------
-_CacheKey = Tuple[str, float]  # (command, config_fingerprint)
+_CacheKey = Tuple[str, int]  # (command, hash_of_config)
 _CACHE: Dict[_CacheKey, "_CachedFetch"] = {}
 
 

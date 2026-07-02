@@ -299,7 +299,7 @@ chmod 400 ~/.vaultwarden/local.key
 python3 << 'EOF'
 import json, subprocess, os
 KEYFILE = os.path.expanduser("~/.vaultwarden/local.key")
-ENCFILE = os.path.expanduser("~/.hermes/secrets/opencode-go.keys.enc")
+ENCFILE = os.path.expanduser("~/.hermes/secrets/credentials.keys.enc")
 os.makedirs(os.path.dirname(ENCFILE), exist_ok=True)
 
 secrets = {
@@ -328,7 +328,7 @@ In the loader script, add after the failed-login block:
 ```bash
 # Inside the failed-login block, before exit 0:
 LOCAL_KEYFILE="$HOME/.vaultwarden/local.key"
-LOCAL_ENCFILE="$HOME/.hermes/secrets/opencode-go.keys.enc"
+LOCAL_ENCFILE="$HOME/.hermes/secrets/credentials.keys.enc"
 
 if [ -f "$LOCAL_KEYFILE" ] && [ -f "$LOCAL_ENCFILE" ]; then
     python3 -c "
@@ -336,10 +336,11 @@ import json, subprocess, os, uuid, time
 KEYFILE = '$LOCAL_KEYFILE'
 ENCFILE = '$LOCAL_ENCFILE'
 AUTH = os.path.expanduser('~/.hermes/auth.json')
+PROVIDER = 'YOUR_PROVIDER'  # change to your Hermes provider name
 
 with open(AUTH) as f:
     auth = json.load(f)
-if auth.get('credential_pool', {}).get('opencode-go', []):
+if auth.get('credential_pool', {}).get(PROVIDER, []):
     exit(0)  # pool already has entries
 
 r = subprocess.run(['openssl', 'enc', '-d', '-aes-256-cbc', '-pbkdf2',
@@ -358,7 +359,7 @@ for i, (var, val) in enumerate(sorted(secrets['keys'].items()), 1):
         'access_token': val,
         'secret_source': 'backup',
     })
-auth.setdefault('credential_pool', {})['opencode-go'] = entries
+auth.setdefault('credential_pool', {})[PROVIDER] = entries
 with open(AUTH, 'w') as f:
     json.dump(auth, f, indent=2)
 os.chmod(AUTH, 0o600)
@@ -373,10 +374,10 @@ fi
 |-------|-----------|
 | **Credentials file** | `~/.vaultwarden/credentials` at mode 400, root-owned |
 | **Vaultwarden URL** | Use a Tailscale IP or VPN-only domain — never expose directly |
-| **Auth pool** | `/root/.hermes/auth.json` at mode 600, root-owned |
+| **Auth pool** | `auth.json` at mode 600, root-owned |
 | **Backup key** | `local.key` at mode 400, different directory from encrypted blob |
 | **Encrypted blob** | `secrets/*.keys.enc` at mode 600 |
-| **Env files** | `~/.hermes/.env` at mode 600 — contains only the bootstrap credential |
+| **Env files** | `.env` at mode 600 — contains only the bootstrap credential |
 | **Fetch script** | Mode 700 — no world-readable tokens |
 | **Systemd** | `ExecStartPre` scripts run as root; secure the service unit |
 | **Dependency** | `After=docker.service` prevents boot races |
