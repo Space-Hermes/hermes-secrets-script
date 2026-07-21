@@ -1,0 +1,118 @@
+name: GitHub maintenance (advisory)
+
+on:
+  schedule:
+    # Weekly, bounded read-only inventory. GitHub may delay scheduled runs.
+    - cron: "17 09 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run in read-only mode (the only supported mode)"
+        required: true
+        default: true
+        type: boolean
+
+permissions: {}
+
+concurrency:
+  group: github-maintenance-${{ github.repository }}
+  cancel-in-progress: true
+
+jobs:
+  inventory:
+    # Job-level permissions make the safety boundary explicit.
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the reviewed automation
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Enforce read-only mode
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          # Scheduled runs have no workflow input; they are always dry runs.
+          if [[ "$EVENT_NAME" == "schedule" ]]; then
+            REQUESTED_DRY_RUN=true
+          fi
+          # A future apply mode must be a separately reviewed workflow/job with
+          # separate permissions; this workflow fails closed instead.
+          if [[ "$REQUESTED_DRY_RUN" != "true" ]]; then
+            echo "Only dry-run mode is supported; no repository changes are implemented." >&2
+            exit 1
+          fi
+          echo "Maintenance mode: dry-run (read-only)"
+
+      - name: Generate read-only inventory
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 src/maintenance_inventory.py \
+            --config .github/maintenance.json \
+            --output maintenance-report.md \
+            | tee "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify report delivery configuration
+        if: github.event_name == 'schedule'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$TELEGRAM_BOT_TOKEN" || -z "$TELEGRAM_CHAT_ID" ]]; then
+            echo "Scheduled delivery is not configured: add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID repository secrets." >&2
+            exit 1
+          fi
+
+      - name: Deliver weekly report to Telegram
+        if: github.event_name == 'schedule' && env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$TELEGRAM_BOT_TOKEN"
+          if [[ ! "$TELEGRAM_CHAT_ID" =~ ^-?[0-9]+$ ]]; then
+            echo "TELEGRAM_CHAT_ID must be a numeric Telegram chat identifier." >&2
+            exit 1
+          fi
+          # Write a curl config file to avoid the bot token in process arguments.
+          TG_CFG="$(mktemp)"
+          trap 'rm -f "$TG_CFG"' EXIT
+          chmod 600 "$TG_CFG"
+          printf 'url = https://api.telegram.org/bot%s/sendDocument\n' "$TELEGRAM_BOT_TOKEN" > "$TG_CFG"
+          curl --fail --silent --show-error --request POST \
+            --config "$TG_CFG" \
+            --form "chat_id=${TELEGRAM_CHAT_ID}" \
+            --form "document=@maintenance-report.md;type=text/markdown" \
+            --form "caption=Weekly GitHub maintenance report (read-only advisory)"
+
+      - name: Escalate failed scheduled run
+        if: failure() && github.event_name == 'schedule' && env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$TELEGRAM_BOT_TOKEN"
+          TG_CFG="$(mktemp)"
+          trap 'rm -f "$TG_CFG"' EXIT
+          chmod 600 "$TG_CFG"
+          printf 'url = https://api.telegram.org/bot%s/sendMessage\n' "$TELEGRAM_BOT_TOKEN" > "$TG_CFG"
+          curl --fail --silent --show-error --request POST \
+            --config "$TG_CFG" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "text=GitHub maintenance workflow failed for ${GITHUB_REPOSITORY} (run ${GITHUB_RUN_ID}). Review the Actions logs."

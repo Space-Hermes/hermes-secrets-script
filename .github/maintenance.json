@@ -1,0 +1,5 @@
+{
+  "dry_run": true,
+  "max_items": 50,
+  "stale_after_days": 30
+}
